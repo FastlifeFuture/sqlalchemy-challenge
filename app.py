@@ -1,5 +1,6 @@
 #Import modules
-from unicodedata import name
+# from lib2to3.pytree import _Results
+# from unicodedata import name
 import numpy as np
 import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
@@ -133,45 +134,50 @@ def tobs():
     #return the data jsonified
     return jsonify(most_active_tobs)
 
-#Create a route that will return the min, avg, max temperature given start date or start to the end date
+# Create a route that will return the min, avg, max temperature given start date or start to the end date
 @app.route("/api/v1.0/<start>")
 def begin_date(start = None):
     start = dt.datetime.strptime(start, "%Y-%m-%d").date()
     print("Client request was recieved")
-    
-    #create a session that will link from python to db
+    sel = [func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)]
     session = Session(engine)
-    
-    #base classes keys allows you to examine the tables that hold the data
-    print(Base.classes.keys())
-    
-    #query date and temps for the most active station
-    
-    count_max = func.max(Measurement.tobs)
-    count_min = func.min(Measurement.tobs)
-    count_avg = func.avg(Measurement.tobs)   
-    
-    results = session.query(Measurement.date, count_max, count_min, count_avg).filter(Measurement.date >= start)
-   
-    #close out the session
+     #TMIN, TAVG, TMAX Calculation
+    start = dt.datetime.strptime(str(start), "%Y-%m-%d")
     session.close()
+    session = Session(engine)
+
+    results = session.query(*sel).\
+        filter(Measurement.date >= start).all()
     
-    begin_date = []
-    for date, tobs in results: 
-        begin_date_dict = {}
-        begin_date_dict["date"] = date
-        begin_date_dict["tobs"] = tobs
-        begin_date.append(begin_date_dict)
+    session.close()
+    temps = list(np.ravel(results))
+    return jsonify(temps = temps)
 
-    return jsonify(begin_date)
+#Create a route that will return the min, avg, max for date between the start and end date
+@app.route("/api/v1.0/<start>/<end>")
+def stats (start=None, end=None):
+    sel = [func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)]
+    session = Session(engine)
+    if not end:
+        start = dt.datetime.strptime(start, "%Y-%m-%d")
+        results = session.query(*sel).\
+            filter(Measurement.date >= start).all()
+        session.close()
+        
+        temps = list(np.ravel(results))
+        return jsonify(temps)
+    #TMIN, TAVG, TMAX Calculation 
+    start = dt.datetime.strptime(start, "%Y-%m-%d")
+    end = dt.datetime.strptime(end, "%Y-%m-%d") 
+    session = Session(engine)
+    results = session.query(*sel).\
+        filter(Measurement.date >= start).\
+        filter(Measurement.date <= end).all()
 
-# @app.route("/api/v1.0/<start>/<end>")
-# def begin_to_end_date(start = None, end = None)
-#     start = dt.datetime.strptime(start, "%Y-%m-%d").date()
-#     end = dt.datetime.strptime(start, "%Y-%m-%d").date()
+    session.close()
+    temps = list(np.ravel(results))
+    return jsonify(temps = temps)
 
-
-    # Temps_df = pd.DataFrame(Temps, columns = ['date','Tobs'])
-    # return(Temps_df.to_json())
+#end the app
 if __name__ == "__main__":
     app.run(debug=True)
